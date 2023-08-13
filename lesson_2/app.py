@@ -1,38 +1,25 @@
 import asyncio
-
+from loguru import logger
 from web3 import Web3
 
 from sdk.data.models import Networks
 from sdk.client import Client
 
-from private_data import private_key1, private_key2, private_key3, proxy
+from private_data import proxy
+
+
+async def check_empty_wallets(index: int):
+    client = Client(network=Networks.Ethereum, proxy=proxy[index], check_proxy=False)
+    balance = await client.wallet.balance()
+    logger.success(f'balance: {balance} - address: {client.account.address}')
 
 
 async def main():
-    client = Client(private_key=private_key1, network=Networks.Optimism, proxy=proxy)
-    # print(await client.wallet.balance(token_address='0xaf88d065e77c8cc2239327c5edb3a432268e5831'))
-    balance = await client.wallet.balance()
-    balance = await client.wallet.balance()
-    balance = await client.wallet.balance()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    tasks = []
+    while True:
+        for i in range(50):
+            tasks.append(asyncio.create_task(check_empty_wallets(i)))
+        await asyncio.gather(*tasks)
 
     '''
     token_address = Web3.to_checksum_address('0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8')
