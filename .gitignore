@@ -6,7 +6,7 @@ __pycache__/
 private_data.py
 .idea/*
 */.idea/*
-
+lesson_2/
 # C extensions
 *.so
 
