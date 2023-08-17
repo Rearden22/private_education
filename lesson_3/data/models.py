@@ -13,10 +13,6 @@ class TokenName(Singleton):
     ARB = 'ARB'
 
 
-class NetworkName(Singleton):
-    ARBITRUM = 'ARBITRUM'
-
-
 class Contracts(Singleton):
     ARBITRUM_WOOFI = RawContract(
         address='0x9aed3a8896a85fe9a8cac52c9b402d092b629a30', abi=read_json(path=(ABIS_DIR, 'woofi.json'))

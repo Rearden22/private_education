@@ -2,29 +2,29 @@ import asyncio
 from typing import Optional
 from web3.types import TxParams
 from py_eth_async.data.models import TxArgs, TokenAmount
-from data.models import Contracts, NetworkName, TokenName
+from data.models import Contracts, TokenName
 from tasks.base import Base
+from loguru import logger
 
 
 class WooFi(Base):
     async def swap(
             self,
-            from_token: TokenName,  # Не уверен, что здесь надо приводить к типу TokenName
-            to_token: TokenName,  # Не уверен, что здесь надо приводить к типу TokenName
+            from_token_ticker: str,
+            to_token_ticker: str,
+            from_token_contract: Contracts.ARBITRUM_ETH,
+            to_token_contract: Contracts.ARBITRUM_USDC,
             amount: Optional[TokenAmount] = None,
-            network: NetworkName = NetworkName.ARBITRUM,  # Не уверен, что здесь надо приводить к типу NetworkName
             slippage: float = 1
     ):
+        failed_text = f'Failed swap {from_token_ticker} to {to_token_ticker} via WooFi'
+        contract = await self.client.contracts.get(contract_address=Contracts.ARBITRUM_WOOFI)
+        token_price = await self.get_token_price(from_token=from_token_ticker, to_token=to_token_ticker)
+        if token_price == -1:
+            logger.error("Can't get a token price. The program will be closed")
+            exit()
 
-        failed_text = f'Failed swap {from_token} to {to_token} via WooFi'
-        contract = await self.client.contracts.get(contract_address=getattr(Contracts, f'{network}_WOOFI'))
-
-        from_token_contract = getattr(Contracts, f'{network}_{from_token}')
-        to_token_contract = getattr(Contracts, f'{network}_{to_token}')
-
-        token_price = await self.get_token_price(from_token=from_token, to_token=to_token)
-
-        if from_token == TokenName.ETH:
+        if from_token_ticker == TokenName.ETH:
             min_to_amount = TokenAmount(
                 amount=token_price * float(amount.Ether) * (1 - slippage / 100),
                 decimals=await self.get_decimals(contract_address=to_token_contract.address)
@@ -40,14 +40,14 @@ class WooFi(Base):
             )
             await asyncio.sleep(5)
 
-            if to_token is not TokenName.ETH:
+            if to_token_ticker is not TokenName.ETH:
                 min_to_amount = TokenAmount(
-                    amount=float(amount.Ether) * token_price * (1 - slippage / 100), # здесь после token_price поменял / на *
+                    amount=float(amount.Ether) * token_price * (1 - slippage / 100),
                     decimals=await self.get_decimals(contract_address=to_token_contract.address)
                 )
             else:
                 min_to_amount = TokenAmount(
-                    amount=float(amount.Ether) * token_price * (1 - slippage / 100), # здесь после token_price поменял / на *
+                    amount=float(amount.Ether) * token_price * (1 - slippage / 100),
                 )
 
         args = TxArgs(
@@ -64,139 +64,139 @@ class WooFi(Base):
             data=contract.encodeABI('swap', args=args.tuple()),
         )
 
-        if from_token == TokenName.ETH:
+        if from_token_ticker == TokenName.ETH:
             tx_params['value'] = amount.Wei
 
         tx = await self.client.transactions.sign_and_send(tx_params=tx_params)
         receipt = await tx.wait_for_receipt(client=self.client, timeout=200)
         if receipt:
-            return (f'{amount.Ether} {from_token} was swaped to '
-                    f'{min_to_amount.Ether} {to_token} via WooFi: {tx.hash.hex()}')
+            return (f'{amount.Ether} {from_token_ticker} was swaped to '
+                    f'{min_to_amount.Ether} {to_token_ticker} via WooFi: {tx.hash.hex()}')
 
         return f'{failed_text}!'
 
     async def swap_eth_to_usdc(
             self,
             amount: TokenAmount,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.ETH,
-            to_token=TokenName.USDC,
+            from_token_ticker=TokenName.ETH,
+            to_token_ticker=TokenName.USDC,
+            from_token_contract=Contracts.ARBITRUM_ETH,
+            to_token_contract=Contracts.ARBITRUM_USDC,
             amount=amount,
-            network=network,
             slippage=slippage
         )
 
     async def swap_usdc_to_eth(
             self,
             amount: Optional[TokenAmount] = None,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.USDC,
-            to_token=TokenName.ETH,
+            from_token_ticker=TokenName.USDC,
+            to_token_ticker=TokenName.ETH,
+            from_token_contract=Contracts.ARBITRUM_USDC,
+            to_token_contract=Contracts.ARBITRUM_ETH,
             amount=amount,
-            network=network,
             slippage=slippage
         )
 
     async def swap_eth_to_usdt(
             self,
             amount: TokenAmount,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.ETH,
-            to_token=TokenName.USDT,
+            from_token_ticker=TokenName.ETH,
+            to_token_ticker=TokenName.USDT,
+            from_token_contract=Contracts.ARBITRUM_ETH,
+            to_token_contract=Contracts.ARBITRUM_USDT,
             amount=amount,
-            network=network,
             slippage=slippage
         )
 
     async def swap_usdt_to_eth(
             self,
             amount: Optional[TokenAmount] = None,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.USDT,
-            to_token=TokenName.ETH,
+            from_token_ticker=TokenName.USDT,
+            to_token_ticker=TokenName.ETH,
+            from_token_contract=Contracts.ARBITRUM_USDT,
+            to_token_contract=Contracts.ARBITRUM_ETH,
             amount=amount,
-            network=network,
             slippage=slippage
         )
 
     async def swap_eth_to_wbtc(
             self,
             amount: TokenAmount,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.ETH,
-            to_token=TokenName.WBTC,
+            from_token_ticker=TokenName.ETH,
+            to_token_ticker=TokenName.WBTC,
+            from_token_contract=Contracts.ARBITRUM_ETH,
+            to_token_contract=Contracts.ARBITRUM_WBTC,
             amount=amount,
-            network=network,
             slippage=slippage
         )
 
     async def swap_wbtc_to_eth(
             self,
             amount: Optional[TokenAmount] = None,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.WBTC,
-            to_token=TokenName.ETH,
+            from_token_ticker=TokenName.WBTC,
+            to_token_ticker=TokenName.ETH,
+            from_token_contract=Contracts.ARBITRUM_WBTC,
+            to_token_contract=Contracts.ARBITRUM_ETH,
             amount=amount,
-            network=network,
             slippage=slippage
         )
 
     async def swap_eth_to_arb(
             self,
             amount: TokenAmount,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.ETH,
-            to_token=TokenName.ARB,
+            from_token_ticker=TokenName.ETH,
+            to_token_ticker=TokenName.ARB,
+            from_token_contract=Contracts.ARBITRUM_ETH,
+            to_token_contract=Contracts.ARBITRUM_ARB,
             amount=amount,
-            network=network,
             slippage=slippage
         )
 
     async def swap_arb_to_usdc(
             self,
             amount: Optional[TokenAmount] = None,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.ARB,
-            to_token=TokenName.USDC,
+            from_token_ticker=TokenName.ARB,
+            to_token_ticker=TokenName.USDC,
+            from_token_contract=Contracts.ARBITRUM_ARB,
+            to_token_contract=Contracts.ARBITRUM_USDC,
             amount=amount,
-            network=network,
             slippage=slippage
         )
 
     async def swap_usdc_to_arb(
             self,
             amount: Optional[TokenAmount] = None,
-            network: NetworkName = NetworkName.ARBITRUM,
             slippage: float = 1
     ):
         await self.swap(
-            from_token=TokenName.USDC,
-            to_token=TokenName.ARB,
+            from_token_ticker=TokenName.USDC,
+            to_token_ticker=TokenName.ARB,
+            from_token_contract=Contracts.ARBITRUM_USDC,
+            to_token_contract=Contracts.ARBITRUM_ARB,
             amount=amount,
-            network=network,
             slippage=slippage
         )
