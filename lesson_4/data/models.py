@@ -43,5 +43,13 @@ class Contracts(Singleton):
     )
 
     AVALANCHE_USDC = RawContract(
-        address='0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', abi=read_json(path=(ABIS_DIR, 'stargate.json'))
+        address='0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', abi=DefaultABIs.Token
+    )
+
+    OPTIMISM_USDC = RawContract(
+        address='0x7F5c764cBc14f9669B88837ca1490cCa17c31607', abi=DefaultABIs.Token
+    )
+
+    OPTIMISM_STARGATE = RawContract(
+        address='0xB0D502E938ed5f4df2E681fE6E419ff29631d62b', abi=read_json(path=(ABIS_DIR, 'stargate.json'))
     )

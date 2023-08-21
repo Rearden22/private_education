@@ -8,32 +8,38 @@ from data.models import Contracts
 from tasks.stargate import Stargate
 from private_data import private_key1
 from tasks.woofi import WooFi
+from py_eth_async.data.models import Network
 
 
 async def main():
-    client = Client(private_key=private_key1, network=Networks.Avalanche)
+    client = Client(private_key=private_key1, network=Networks.Arbitrum)
+    # print(Networks.Avalanche)
     stargate = Stargate(client=client)
-
-    # status = await stargate.send_usdc(
-    #     to_network_name=Networks.Polygon.name,
-    #     amount=TokenAmount(0.5, decimals=6)
-    # )
-
-    status = await stargate.send_usdc_from_avalanche_to_usdt_bsc(
+    # await stargate.get_network_with_usdc()
+    # print(await Stargate.get_network_with_usdc())
+    # await get_network_with_usdc()
+    status = await stargate.send_usdc(
+        to_network_name=Networks.BSC.name,
         amount=TokenAmount(0.5, decimals=6),
-        dest_fee=TokenAmount(0.005),
-        max_fee=1.1
+        max_fee=2
     )
-    # $5.55
-    # $0.74
-
-    # 3.27
-    # 1.89
 
     if 'Failed' in status:
         logger.error(status)
     else:
         logger.success(status)
+
+    # status = await stargate.send_usdc_from_avalanche_to_usdt_bsc(
+    #     amount=TokenAmount(0.5, decimals=6),
+    #     dest_fee=TokenAmount(0.005),
+    #     max_fee=1.1
+    # )
+    # $5.55
+    # $0.74
+
+    # 3.27
+    # 1.89
+    #
 
     # res = await client.transactions.decode_input_data(
     #     client=client,

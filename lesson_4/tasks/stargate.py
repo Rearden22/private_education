@@ -1,3 +1,8 @@
+from py_eth_async.client import Client
+from py_eth_async.data.models import Network
+
+from private_data import private_key1
+
 '''
 Arbitrum:
 arbitrum -> avalanche (2.5): https://arbiscan.io/tx/0x3ad0c8aa2b5675c3f6fbfde5fb6c668c95a99179db0b9f107a6068c7bfe0071b
@@ -16,13 +21,13 @@ avalanche -> bsc (2.5 USDT): https://snowtrace.io/tx/0x47d2cfa1d89b1656c83c5548e
 
 import asyncio
 import random
-from typing import Optional
+from typing import Optional, Union
 from web3.types import TxParams
 from web3.contract import AsyncContract
 
 from tasks.base import Base
 from py_eth_async.data.models import TxArgs, TokenAmount
-from py_eth_async.data.models import Networks
+from py_eth_async.data.models import Networks, RawContract
 
 from data.config import logger
 from data.models import Contracts
@@ -31,7 +36,8 @@ from data.models import Contracts
 class Stargate(Base):
     contract_data = {
         Networks.Arbitrum.name: {
-            'usdc_contract': Contracts.ARBITRUM_USDC_e,
+            'usdc.e_contract': Contracts.ARBITRUM_USDC_e,
+            'usdc_contract': Contracts.ARBITRUM_USDC,
             'stargate_contract': Contracts.ARBITRUM_STARGATE,
             'stargate_chain_id': 110,
             'src_pool_id': 1,
@@ -51,6 +57,13 @@ class Stargate(Base):
             'src_pool_id': 1,
             'dst_pool_id': 1,
         },
+        Networks.Optimism.name: {
+            'usdc_contract': Contracts.OPTIMISM_USDC,
+            'stargate_contract': Contracts.OPTIMISM_STARGATE,
+            'stargate_chain_id': 111,
+            'src_pool_id': 1,
+            'dst_pool_id': 1,
+        },
         Networks.BSC.name: {
             'stargate_chain_id': 102,
             'src_pool_id': 1,
@@ -58,34 +71,87 @@ class Stargate(Base):
         }
     }
 
-    async def send_usdc(
-            self,
-            to_network_name: str,
-            amount: Optional[TokenAmount] = None,
-            slippage: float = 0.5,
-            max_fee: float = 1
-    ):
-        failed_text = f'Failed to send {self.client.network.name} USDC to {to_network_name} USDC via Stargate'
-        # try:
-        if self.client.network.name == to_network_name:
-            return f'{failed_text}: The same source network and destination network'
+    @staticmethod
+    async def get_network_with_usdc() -> Network:
+        max_usdc_network = {
+            'usdc_balance': 0,
+            'network': None,
+        }
+        for network in dir(Networks):
+            network_instance = getattr(Networks, network)
+            if hasattr(network_instance, 'name'):
+                client = Client(private_key=private_key1, network=network_instance)
+                stargate = Stargate(client=client)
+                if network_instance.name in stargate.contract_data:
+                    network_data = stargate.contract_data[network_instance.name]
+                    if 'usdc_contract' in network_data:
+                        if network_instance == Networks.Arbitrum:
+                            usdc_contract = network_data['usdc.e_contract'].address
+                        else:
+                            usdc_contract = network_data['usdc_contract'].address
+                        usdc_balance = await client.wallet.balance(token=usdc_contract)
+                        if max_usdc_network['usdc_balance'] < usdc_balance.Wei:
+                            max_usdc_network['usdc_balance'] = usdc_balance.Wei
+                            max_usdc_network['network'] = network_instance
+                if max_usdc_network['network'] is None:
+                    raise ValueError("Can't get network with max usdc")
+        return max_usdc_network['network']
 
-        usdc_contract = await self.client.contracts.default_token(
-            contract_address=Stargate.contract_data[self.client.network.name]['usdc_contract'].address)
+    async def get_contracts(self) -> tuple[RawContract, AsyncContract]:
+        if self.client.network == Networks.Arbitrum:
+            usdc_contract = await self.client.contracts.default_token(
+                contract_address=Stargate.contract_data[self.client.network.name]['usdc.e_contract'].address)
+        else:
+            usdc_contract = await self.client.contracts.default_token(
+                contract_address=Stargate.contract_data[self.client.network.name]['usdc_contract'].address)
         stargate_contract = await self.client.contracts.get(
             contract_address=Stargate.contract_data[self.client.network.name]['stargate_contract'])
+        return usdc_contract, stargate_contract
 
-        if not amount:
-            amount = await self.client.wallet.balance(token=usdc_contract.address)
+    @staticmethod
+    async def get_coin_symbol(to_network_name: str) -> str:
+        for network in dir(Networks):
+            network_instance = getattr(Networks, network)
+            if hasattr(network_instance, 'name') and network_instance.name == to_network_name:
+                return network_instance.coin_symbol
+            else:
+                raise ValueError("Can't get coin symbol")
 
-        logger.info(
-            f'{self.client.account.address} | Stargate | '
-            f'send USDC from {self.client.network.name} to {to_network_name} | amount: {amount.Ether}')
+    async def check_dest_fee(
+            self,
+            to_network_name: str,
+            dest_fee: TokenAmount,
+            value: TokenAmount,
+            max_fee: float,
+            failed_text: str
+    ) -> Optional[str | bool]:
+        token_price = await self.get_token_price(token=self.client.network.coin_symbol)
+        if dest_fee:
+            dest_coin_symbol = await self.get_coin_symbol(to_network_name)
+            dest_native_token_price = await self.get_token_price(dest_coin_symbol)  # костыль
+            dst_native_amount_dollar = float(dest_fee.Ether) * dest_native_token_price
+            network_fee = float(value.Ether) * token_price
+            if network_fee - dst_native_amount_dollar > max_fee:
+                return (f'{failed_text} | too high fee: {network_fee - dst_native_amount_dollar} '
+                        f'({self.client.network.name})')
+        network_fee = float(value.Ether) * token_price
+        if network_fee > max_fee:
+            return f'{failed_text} | too high fee: {network_fee} ({self.client.network.name})'
+        return True
+
+    async def get_lz_params(
+            self,
+            dest_fee: TokenAmount,
+            to_network_name: str,
+            amount: TokenAmount,
+            slippage: float,
+            stargate_contract: AsyncContract,
+    ) -> Union[TxArgs, TokenAmount]:
 
         lz_tx_params = TxArgs(
             dstGasForCall=0,
-            dstNativeAmount=0,
-            dstNativeAddr='0x0000000000000000000000000000000000000001'
+            dstNativeAmount=dest_fee.Wei if dest_fee else 0,
+            dstNativeAddr=self.client.account.address if dest_fee else '0x0000000000000000000000000000000000000001'
         )
 
         args = TxArgs(
@@ -105,41 +171,80 @@ class Stargate(Base):
             to_network_name=to_network_name,
             lz_tx_params=lz_tx_params
         )
-        if not value:
-            return f'{failed_text} | can not get value ({self.client.network.name})'
 
-        native_balance = await self.client.wallet.balance()
-        if native_balance.Wei < value.Wei:
-            return f'{failed_text}: To low native balance: balance: {native_balance.Ether}; value: {value.Ether}'
+        return lz_tx_params, args, value
 
-        token_price = await self.get_token_price(token=self.client.network.coin_symbol)
-        network_fee = float(value.Ether) * token_price
-        if network_fee > max_fee:
-            return f'{failed_text} | too high fee: {network_fee} ({self.client.network.name})'
+    async def send_usdc(
+            self,
+            to_network_name: str,
+            amount: Optional[TokenAmount] = None,
+            dest_fee: Optional[TokenAmount] = None,
+            slippage: float = 0.5,
+            max_fee: float = 1
+    ):
+        failed_text = f'Failed to send {self.client.network.name} USDC to {to_network_name} USDC via Stargate'
+        if self.client.network.name == to_network_name:
+            return f'{failed_text}: The same source network and destination network'
+        try:
+            usdc_contract, stargate_contract = await self.get_contracts()
 
-        if await self.approve_interface(
-                token_address=usdc_contract.address,
-                spender=stargate_contract.address,
-                amount=amount
-        ):
-            await asyncio.sleep(random.randint(5, 10))
-        else:
-            return f'{failed_text} | can not approve'
+            if not amount:
+                amount = await self.client.wallet.balance(token=usdc_contract.address)
 
-        tx_params = TxParams(
-            to=stargate_contract.address,
-            data=stargate_contract.encodeABI('swap', args=args.tuple()),
-            value=value.Wei
-        )
+            logger.info(
+                f'{self.client.account.address} | Stargate | '
+                f'send USDC from {self.client.network.name} to {to_network_name} | amount: {amount.Ether}')
 
-        tx = await self.client.transactions.sign_and_send(tx_params=tx_params)
-        receipt = await tx.wait_for_receipt(client=self.client, timeout=300)
-        if receipt:
-            return f'{amount.Ether} USDC was send from {self.client.network.name} to {to_network_name} via Stargate: {tx.hash.hex()}'
-        return f'{failed_text}!'
+            lz_tx_params, args, value = await self.get_lz_params(
+                dest_fee=dest_fee,
+                to_network_name=to_network_name,
+                amount=amount,
+                slippage=slippage,
+                stargate_contract=stargate_contract
+            )
 
-        # except Exception as e:
-        #     return f'{failed_text}: {e}'
+            if not value:
+                return f'{failed_text} | can not get value ({self.client.network.name})'
+
+            native_balance = await self.client.wallet.balance()
+            if native_balance.Wei < value.Wei:
+                return f'{failed_text}: To low native balance: balance: {native_balance.Ether}; value: {value.Ether}'
+
+            dest_fee_status = await self.check_dest_fee(
+                to_network_name=to_network_name,
+                dest_fee=dest_fee,
+                value=value,
+                max_fee=max_fee,
+                failed_text=failed_text
+            )
+
+            if not dest_fee_status:
+                return dest_fee_status
+
+            if await self.approve_interface(
+                    token_address=usdc_contract.address,
+                    spender=stargate_contract.address,
+                    amount=amount
+            ):
+                await asyncio.sleep(random.randint(5, 10))
+            else:
+                return f'{failed_text} | can not approve'
+
+            tx_params = TxParams(
+                to=stargate_contract.address,
+                data=stargate_contract.encodeABI('swap', args=args.tuple()),
+                value=value.Wei
+            )
+
+            tx = await self.client.transactions.sign_and_send(tx_params=tx_params)
+            receipt = await tx.wait_for_receipt(client=self.client, timeout=300)
+            if receipt:
+                return (f'{amount.Ether} USDC was send from {self.client.network.name} to {to_network_name} '
+                        f'via Stargate: {tx.hash.hex()}')
+            return f'{failed_text}!'
+
+        except Exception as e:
+            return f'{failed_text}: {e}'
 
     async def get_value(self, router_contract: AsyncContract, to_network_name: str,
                         lz_tx_params: TxArgs) -> Optional[TokenAmount]:
@@ -207,11 +312,12 @@ class Stargate(Base):
                 return f'{failed_text}: To low native balance: balance: {native_balance.Ether}; value: {value.Ether}'
 
             token_price = await self.get_token_price(token=self.client.network.coin_symbol)
-            dest_native_token_price = await self.get_token_price(token='BNB') # костыль
+            dest_native_token_price = await self.get_token_price(token='BNB')  # костыль
             dst_native_amount_dollar = float(dest_fee.Ether) * dest_native_token_price
             network_fee = float(value.Ether) * token_price
             if network_fee - dst_native_amount_dollar > max_fee:
-                return f'{failed_text} | too high fee: {network_fee - dst_native_amount_dollar} ({self.client.network.name})'
+                return (f'{failed_text} | too high fee: {network_fee - dst_native_amount_dollar} '
+                        f'({self.client.network.name})')
 
             if await self.approve_interface(
                     token_address=usdc_contract.address,
@@ -231,11 +337,11 @@ class Stargate(Base):
             tx = await self.client.transactions.sign_and_send(tx_params=tx_params)
             receipt = await tx.wait_for_receipt(client=self.client, timeout=300)
             if receipt:
-                return f'{amount.Ether} USDC was send from {self.client.network.name} to {to_network_name} via Stargate: {tx.hash.hex()}'
+                return (f'{amount.Ether} USDC was send from {self.client.network.name} to {to_network_name} '
+                        f'via Stargate: {tx.hash.hex()}')
             return f'{failed_text}!'
 
         except Exception as e:
             return f'{failed_text}: {e}'
-
 
     # todo: написать функцию поиска usdc по доступным сетям
