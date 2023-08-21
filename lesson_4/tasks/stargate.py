@@ -210,16 +210,17 @@ class Stargate(Base):
             if native_balance.Wei < value.Wei:
                 return f'{failed_text}: To low native balance: balance: {native_balance.Ether}; value: {value.Ether}'
 
-            dest_fee_status = await self.check_dest_fee(
-                to_network_name=to_network_name,
-                dest_fee=dest_fee,
-                value=value,
-                max_fee=max_fee,
-                failed_text=failed_text
-            )
+            if dest_fee:
+                dest_fee_status = await self.check_dest_fee(
+                    to_network_name=to_network_name,
+                    dest_fee=dest_fee,
+                    value=value,
+                    max_fee=max_fee,
+                    failed_text=failed_text
+                )
 
-            if not dest_fee_status:
-                return dest_fee_status
+                if not dest_fee_status:
+                    return dest_fee_status
 
             if await self.approve_interface(
                     token_address=usdc_contract.address,
