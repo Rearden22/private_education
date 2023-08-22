@@ -53,3 +53,11 @@ class Contracts(Singleton):
     OPTIMISM_STARGATE = RawContract(
         address='0xB0D502E938ed5f4df2E681fE6E419ff29631d62b', abi=read_json(path=(ABIS_DIR, 'stargate.json'))
     )
+
+    BINANCE_USDT = RawContract(
+        address='0x55d398326f99059fF775485246999027B3197955', abi=DefaultABIs.Token
+    )
+
+    BINANCE_COREDAO_BRIDGE = RawContract(
+        address='0x52e75D318cFB31f9A2EdFa2DFee26B161255B233', abi=read_json(path=(ABIS_DIR, 'coredao.json'))
+    )

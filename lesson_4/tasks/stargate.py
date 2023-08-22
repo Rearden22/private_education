@@ -1,5 +1,5 @@
 from py_eth_async.client import Client
-from py_eth_async.data.models import Network
+from py_eth_async.data.models import Network, TxArgs, TokenAmount
 
 from private_data import private_key1
 
@@ -21,12 +21,11 @@ avalanche -> bsc (2.5 USDT): https://snowtrace.io/tx/0x47d2cfa1d89b1656c83c5548e
 
 import asyncio
 import random
-from typing import Optional, Union
+from typing import Optional
 from web3.types import TxParams
 from web3.contract import AsyncContract
 
 from tasks.base import Base
-from py_eth_async.data.models import TxArgs, TokenAmount
 from py_eth_async.data.models import Networks, RawContract
 
 from data.config import logger
@@ -36,7 +35,7 @@ from data.models import Contracts
 class Stargate(Base):
     contract_data = {
         Networks.Arbitrum.name: {
-            'usdc.e_contract': Contracts.ARBITRUM_USDC_e,
+            'usdc_e_contract': Contracts.ARBITRUM_USDC_e,
             'usdc_contract': Contracts.ARBITRUM_USDC,
             'stargate_contract': Contracts.ARBITRUM_STARGATE,
             'stargate_chain_id': 110,
@@ -73,34 +72,31 @@ class Stargate(Base):
 
     @staticmethod
     async def get_network_with_usdc() -> Network:
-        max_usdc_network = {
-            'usdc_balance': 0,
-            'network': None,
-        }
+        max_usdc_balance = 0
+        max_usdc_network = None
         for network in dir(Networks):
             network_instance = getattr(Networks, network)
             if hasattr(network_instance, 'name'):
                 client = Client(private_key=private_key1, network=network_instance)
-                stargate = Stargate(client=client)
-                if network_instance.name in stargate.contract_data:
-                    network_data = stargate.contract_data[network_instance.name]
+                if network_instance.name in Stargate.contract_data:
+                    network_data = Stargate.contract_data[network_instance.name]
                     if 'usdc_contract' in network_data:
                         if network_instance == Networks.Arbitrum:
-                            usdc_contract = network_data['usdc.e_contract'].address
+                            usdc_contract = network_data['usdc_e_contract'].address
                         else:
                             usdc_contract = network_data['usdc_contract'].address
                         usdc_balance = await client.wallet.balance(token=usdc_contract)
-                        if max_usdc_network['usdc_balance'] < usdc_balance.Wei:
-                            max_usdc_network['usdc_balance'] = usdc_balance.Wei
-                            max_usdc_network['network'] = network_instance
-                if max_usdc_network['network'] is None:
+                        if max_usdc_balance < usdc_balance.Wei:
+                            max_usdc_balance = usdc_balance.Wei
+                            max_usdc_network = network_instance
+                if max_usdc_network is None:
                     raise ValueError("Can't get network with max usdc")
-        return max_usdc_network['network']
+        return max_usdc_network
 
     async def get_contracts(self) -> tuple[RawContract, AsyncContract]:
         if self.client.network == Networks.Arbitrum:
             usdc_contract = await self.client.contracts.default_token(
-                contract_address=Stargate.contract_data[self.client.network.name]['usdc.e_contract'].address)
+                contract_address=Stargate.contract_data[self.client.network.name]['usdc_e_contract'].address)
         else:
             usdc_contract = await self.client.contracts.default_token(
                 contract_address=Stargate.contract_data[self.client.network.name]['usdc_contract'].address)
@@ -108,35 +104,21 @@ class Stargate(Base):
             contract_address=Stargate.contract_data[self.client.network.name]['stargate_contract'])
         return usdc_contract, stargate_contract
 
-    @staticmethod
-    async def get_coin_symbol(to_network_name: str) -> str:
-        for network in dir(Networks):
-            network_instance = getattr(Networks, network)
-            if hasattr(network_instance, 'name') and network_instance.name == to_network_name:
-                return network_instance.coin_symbol
-            else:
-                raise ValueError("Can't get coin symbol")
-
     async def check_dest_fee(
             self,
-            to_network_name: str,
+            to_network: Network,
             dest_fee: TokenAmount,
             value: TokenAmount,
             max_fee: float,
-            failed_text: str
-    ) -> Optional[str | bool]:
+    ) -> bool:
         token_price = await self.get_token_price(token=self.client.network.coin_symbol)
-        if dest_fee:
-            dest_coin_symbol = await self.get_coin_symbol(to_network_name)
-            dest_native_token_price = await self.get_token_price(dest_coin_symbol)  # костыль
-            dst_native_amount_dollar = float(dest_fee.Ether) * dest_native_token_price
-            network_fee = float(value.Ether) * token_price
-            if network_fee - dst_native_amount_dollar > max_fee:
-                return (f'{failed_text} | too high fee: {network_fee - dst_native_amount_dollar} '
-                        f'({self.client.network.name})')
+        dest_native_token_price = await self.get_token_price(to_network.coin_symbol)  # костыль
+        dst_native_amount_dollar = float(dest_fee.Ether) * dest_native_token_price
         network_fee = float(value.Ether) * token_price
+        if network_fee - dst_native_amount_dollar > max_fee:
+            return False
         if network_fee > max_fee:
-            return f'{failed_text} | too high fee: {network_fee} ({self.client.network.name})'
+            return False
         return True
 
     async def get_lz_params(
@@ -146,7 +128,7 @@ class Stargate(Base):
             amount: TokenAmount,
             slippage: float,
             stargate_contract: AsyncContract,
-    ) -> Union[TxArgs, TokenAmount]:
+    ) -> tuple[TxArgs, TxArgs, TokenAmount | None]:
 
         lz_tx_params = TxArgs(
             dstGasForCall=0,
@@ -176,15 +158,15 @@ class Stargate(Base):
 
     async def send_usdc(
             self,
-            to_network_name: str,
+            to_network: Network,
             amount: Optional[TokenAmount] = None,
             dest_fee: Optional[TokenAmount] = None,
             slippage: float = 0.5,
             max_fee: float = 1
     ):
-        failed_text = f'Failed to send {self.client.network.name} USDC to {to_network_name} USDC via Stargate'
-        if self.client.network.name == to_network_name:
-            return f'{failed_text}: The same source network and destination network'
+        failed_text = f'Failed to send {self.client.network.name} USDC to {to_network.name} USDC via Stargate'
+        if self.client.network.name == to_network.name:
+            raise AttributeError('The same source network and destination network')
         try:
             usdc_contract, stargate_contract = await self.get_contracts()
 
@@ -193,34 +175,33 @@ class Stargate(Base):
 
             logger.info(
                 f'{self.client.account.address} | Stargate | '
-                f'send USDC from {self.client.network.name} to {to_network_name} | amount: {amount.Ether}')
+                f'send USDC from {self.client.network.name} to {to_network.name} | amount: {amount.Ether}')
 
             lz_tx_params, args, value = await self.get_lz_params(
                 dest_fee=dest_fee,
-                to_network_name=to_network_name,
+                to_network_name=to_network.name,
                 amount=amount,
                 slippage=slippage,
                 stargate_contract=stargate_contract
             )
 
             if not value:
-                return f'{failed_text} | can not get value ({self.client.network.name})'
+                raise ValueError(f'can not get value {self.client.network.name}')
 
             native_balance = await self.client.wallet.balance()
             if native_balance.Wei < value.Wei:
-                return f'{failed_text}: To low native balance: balance: {native_balance.Ether}; value: {value.Ether}'
+                raise ValueError(f'To low native balance: balance: {native_balance.Ether}; value: {value.Ether}')
 
             if dest_fee:
                 dest_fee_status = await self.check_dest_fee(
-                    to_network_name=to_network_name,
+                    to_network=to_network,
                     dest_fee=dest_fee,
                     value=value,
-                    max_fee=max_fee,
-                    failed_text=failed_text
+                    max_fee=max_fee
                 )
 
                 if not dest_fee_status:
-                    return dest_fee_status
+                    raise ValueError("| too high fee, can't make transaction")
 
             if await self.approve_interface(
                     token_address=usdc_contract.address,
@@ -229,7 +210,7 @@ class Stargate(Base):
             ):
                 await asyncio.sleep(random.randint(5, 10))
             else:
-                return f'{failed_text} | can not approve'
+                raise ValueError('| can not approve')
 
             tx_params = TxParams(
                 to=stargate_contract.address,
@@ -240,7 +221,7 @@ class Stargate(Base):
             tx = await self.client.transactions.sign_and_send(tx_params=tx_params)
             receipt = await tx.wait_for_receipt(client=self.client, timeout=300)
             if receipt:
-                return (f'{amount.Ether} USDC was send from {self.client.network.name} to {to_network_name} '
+                return (f'{amount.Ether} USDC was send from {self.client.network.name} to {to_network.name} '
                         f'via Stargate: {tx.hash.hex()}')
             return f'{failed_text}!'
 

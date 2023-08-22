@@ -6,22 +6,30 @@ from py_eth_async.client import Client
 
 from data.models import Contracts
 from tasks.stargate import Stargate
+from tasks.coredao import CoreBridge
 from private_data import private_key1
 from tasks.woofi import WooFi
 from py_eth_async.data.models import Network
 
 
 async def main():
-    client = Client(private_key=private_key1, network=Networks.Arbitrum)
+    client = Client(private_key=private_key1, network=Networks.BSC)
     # print(Networks.Avalanche)
-    stargate = Stargate(client=client)
+    coredao = CoreBridge(client=client)
+    # stargate = Stargate(client=client)
     # await stargate.get_network_with_usdc()
     # print(await Stargate.get_network_with_usdc())
     # await get_network_with_usdc()
-    status = await stargate.send_usdc(
-        to_network_name=Networks.BSC.name,
-        amount=TokenAmount(0.5, decimals=6),
-        max_fee=2
+    # status = await stargate.send_usdc(
+    #     to_network=Networks.BSC,
+    #     amount=TokenAmount(2, decimals=6),
+    #     dest_fee=TokenAmount(0.014),
+    #     max_fee=5
+    # )
+
+    status = await coredao.send_usdt_to_core(
+        to_network=Networks.CoreDAO,
+        amount=TokenAmount(0.2),
     )
 
     if 'Failed' in status:
@@ -59,8 +67,6 @@ async def main():
     #         print(')')
     #     else:
     #         print(key, val)
-
-
     # for key, val in res[1].items():
     #     if isinstance(val, bytes):
     #         print(key, val.hex())
@@ -75,9 +81,6 @@ async def main():
     #         print(')')
     #     else:
     #         print(key, val)
-
-
-
 
 if __name__ == '__main__':
     loop = asyncio.new_event_loop()
