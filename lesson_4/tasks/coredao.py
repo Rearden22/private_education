@@ -37,16 +37,14 @@ class CoreBridge(Base):
                 f'{self.client.account.address} | CoreDao Bridge | '
                 f'send USDT from {self.client.network.name} to {to_network.name} | amount: {amount.Ether}')
 
-            core_call_params = TxArgs(
-                refundAddress=self.client.account.address,
-                zroPaymentAddress='0x0000000000000000000000000000000000000000',
-            )
-
             args = TxArgs(
                 token=usdt_contract.address,
                 amountLD=amount.Wei,
                 to=self.client.account.address,
-                callParams=core_call_params.tuple(),
+                callParams=TxArgs(
+                    refundAddress=self.client.account.address,
+                    zroPaymentAddress='0x0000000000000000000000000000000000000000'
+                ).tuple(),
                 adapterParams='0x'
             )
 
