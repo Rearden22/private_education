@@ -8,14 +8,20 @@ from data.models import Contracts
 from tasks.stargate import Stargate
 from tasks.coredao import CoreBridge
 from private_data import private_key1
+from tasks.uniswap import Uniswap
 from tasks.woofi import WooFi
 from py_eth_async.data.models import Network
 
 
 async def main():
-    client = Client(private_key=private_key1, network=Networks.BSC)
+    client = Client(private_key=private_key1, network=Networks.Arbitrum)
     # print(Networks.Avalanche)
     coredao = CoreBridge(client=client)
+    uniswap = Uniswap(client=client)
+    status = await uniswap.swap(
+        amount=TokenAmount(0.001),
+        to_token=Contracts.ARBITRUM_GETH
+    )
     # stargate = Stargate(client=client)
     # await stargate.get_network_with_usdc()
     # print(await Stargate.get_network_with_usdc())
@@ -27,11 +33,11 @@ async def main():
     #     max_fee=5
     # )
 
-    status = await coredao.send_usdt_to_core(
-        to_network=Networks.CoreDAO,
-        amount=TokenAmount(0.2),
-    )
-
+    # status = await coredao.send_usdt_to_core(
+    #     to_network=Networks.CoreDAO,
+    #     amount=TokenAmount(0.2),
+    # )
+    #
     if 'Failed' in status:
         logger.error(status)
     else:
@@ -51,9 +57,24 @@ async def main():
 
     # res = await client.transactions.decode_input_data(
     #     client=client,
-    #     contract=Contracts.AVALANCHE_USDC,
-    #     input_data='0x9fbf10fc000000000000000000000000000000000000000000000000000000000000006600000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002000000000000000000000000002b8491765536b7d4fe3e59db46596e1f577ecb000000000000000000000000000000000000000000000000000000000007a120000000000000000000000000000000000000000000000000000000000007975c000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000001c000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000014002b8491765536b7d4fe3e59db46596e1f577ecb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000014002b8491765536b7d4fe3e59db46596e1f577ecb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+    #     contract=Contracts.ARBITRUM_UNISWAP,
+    #     input_data='0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000038d7ea4c68000000000000000000000000000000000000000000000000000ddbfec7bf8bf198200000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002b82af49447d8a07e3bd95bd0d56f35241523fbab10001f4dd69db25f6d620a7bad3023c5d32761d353d3de9000000000000000000000000000000000000000000',
+    #
     # )
+    # print(hex(500000000000000))
+    # print(res)
+
+    #
+    # for val, key in res[1].items():
+    #     if val == 'inputs':
+    #         for item in key:
+    #             print(item.hex())
+    # print(hex0x64e616e1'))
+    #
+    # first = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x8d~\xa4\xc6\x80\x00'
+    # second = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x8d~\xa4\xc6\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xdd\xbf\xec{\xf8\xbf\x19\x82\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00+\x82\xafID}\x8a\x07\xe3\xbd\x95\xbd\rV\xf3RAR?\xba\xb1\x00\x01\xf4\xddi\xdb%\xf6\xd6 \xa7\xba\xd3\x02<]2v\x1d5==\xe9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+    #
+    # print(second.hex())
     # for key, val in res[1].items():
     #     if isinstance(val, bytes):
     #         print(key, val.hex())

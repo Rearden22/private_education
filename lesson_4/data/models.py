@@ -22,12 +22,20 @@ class Contracts(Singleton):
         address='0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f', abi=DefaultABIs.Token
     )
 
+    ARBITRUM_ETH = RawContract(
+        address='0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', abi=DefaultABIs.Token
+    )
+
+    ARBITRUM_GETH = RawContract(
+        address='0xdD69DB25F6D620A7baD3023c5d32761D353D3De9', abi=DefaultABIs.Token
+    )
+
     ARBITRUM_STARGATE = RawContract(
         address='0x53bf833a5d6c4dda888f69c22c88c9f356a41614', abi=read_json(path=(ABIS_DIR, 'stargate.json'))
     )
 
-    ARBITRUM_ETH = RawContract(
-        address='0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', abi=DefaultABIs.Token
+    ARBITRUM_UNISWAP = RawContract(
+        address='0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD', abi=read_json(path=(ABIS_DIR, 'uniswap.json'))
     )
 
     POLYGON_USDC = RawContract(
