@@ -17,7 +17,7 @@ class Uniswap(Base):
             amount: TokenAmount,
             to_token: AsyncContract,
             to_token_symbol: str = 'GETH'
-    ) -> TokenAmount:
+    ) -> Optional[TokenAmount]:
         data = {
             "tokenInChainId": self.client.network.chain_id,
             "tokenIn": "ETH",
@@ -47,6 +47,7 @@ class Uniswap(Base):
             async with session.post('https://api.uniswap.org/v2/quote', headers=headers, data=json.dumps(data)) as r:
                 if r.status != 200:
                     logger.error(f"code: {r.status} | can't get price info for swap")
+                    return None
                 else:
                     data_json = await r.json()
                     return TokenAmount(int(data_json['quote']['route'][0][0]['amountOut']), wei=True)
@@ -63,6 +64,8 @@ class Uniswap(Base):
             uniswap_contract = await self.client.contracts.get(contract_address=Contracts.ARBITRUM_UNISWAP)
             to_token_price = await self.get_swap_token_price(amount=amount, to_token=to_token_contract,
                                                              to_token_symbol=to_token_symbol)
+            if not to_token_price:
+                raise ValueError("Can't get destination token price")
             logger.info(f'{self.client.account.address} | Uniswap | swap ETH to {to_token_symbol} | '
                         f'amount: {amount.Ether}')
 
