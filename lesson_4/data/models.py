@@ -38,6 +38,10 @@ class Contracts(Singleton):
         address='0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD', abi=read_json(path=(ABIS_DIR, 'uniswap.json'))
     )
 
+    ARBITRUM_TESTNET_BRIDGE = RawContract(
+        address='0xdD69DB25F6D620A7baD3023c5d32761D353D3De9', abi=read_json(path=(ABIS_DIR, 'testnet_bridge.json'))
+    )
+
     POLYGON_USDC = RawContract(
         address='0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', abi=DefaultABIs.Token
     )

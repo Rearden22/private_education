@@ -9,6 +9,7 @@ from tasks.stargate import Stargate
 from tasks.coredao import CoreBridge
 from private_data import private_key1
 from tasks.uniswap import Uniswap
+from tasks.testnet_bridge import TestnetBridge
 from tasks.woofi import WooFi
 from py_eth_async.data.models import Network
 
@@ -17,10 +18,9 @@ async def main():
     client = Client(private_key=private_key1, network=Networks.Arbitrum)
     # print(Networks.Avalanche)
     coredao = CoreBridge(client=client)
-    uniswap = Uniswap(client=client)
-    status = await uniswap.swap(
-        amount=TokenAmount(0.001),
-        to_token=Contracts.ARBITRUM_GETH
+    testnet_bridge = TestnetBridge(client=client)
+    status = await testnet_bridge.send_geth_to_goerli(
+        amount=TokenAmount(1),
     )
     # stargate = Stargate(client=client)
     # await stargate.get_network_with_usdc()
